@@ -12,7 +12,8 @@ on:
       - "frontend/**"
 
 jobs:
-  build-and-deploy:
+  build:
+    name: Build Flutter Web
     runs-on: ubuntu-latest
 
     steps:
@@ -22,6 +23,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: "3.44.6"
           channel: stable
           cache: true
 
@@ -36,9 +38,31 @@ jobs:
             --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
             --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
 
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: frontend/build/web
+          retention-days: 1
+
+  deploy:
+    name: Deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    needs: build
+    # Only deploy on direct pushes to main (not on pull requests)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: ./web-build
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy frontend/build/web --project-name=courtflow --branch=${{ github.ref_name }}
+          command: pages deploy ./web-build --project-name=courtflow --branch=main
+
