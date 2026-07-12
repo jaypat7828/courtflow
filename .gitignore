@@ -216,3 +216,17 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# FVM Version Cache
+.fvm/flutter_sdk
+
+# Local environment — contains real credentials, never commit
+frontend/.env.json
+
+# Flutter build artifacts
+frontend/build/
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/pubspec.lock
+.fvm/

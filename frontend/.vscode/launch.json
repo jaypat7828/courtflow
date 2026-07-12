@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "CourtFlow (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [
+        "-d",
+        "chrome",
+        "--dart-define-from-file=.env.json"
+      ]
+    },
+    {
+      "name": "CourtFlow (web-server)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [
+        "-d",
+        "web-server",
+        "--web-port=8080",
+        "--dart-define-from-file=.env.json"
+      ]
+    }
+  ]
+}
