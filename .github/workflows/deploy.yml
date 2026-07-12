@@ -59,6 +59,14 @@ jobs:
           name: web-build
           path: ./web-build
 
+      - name: Create Cloudflare Pages project (if not exists)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages project create courtflow --production-branch=main
+        continue-on-error: true   # silently passes if project already exists
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
