@@ -9,6 +9,7 @@
       "args": [
         "-d",
         "chrome",
+        "--web-port=3000",
         "--dart-define-from-file=.env.json"
       ]
     },
@@ -20,7 +21,7 @@
       "args": [
         "-d",
         "web-server",
-        "--web-port=8080",
+        "--web-port=3000",
         "--dart-define-from-file=.env.json"
       ]
     }
