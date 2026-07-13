@@ -64,7 +64,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages project create courtflow --production-branch=main
+          command: pages project create courtflowapp --production-branch=main
         continue-on-error: true   # silently passes if project already exists
 
       - name: Deploy to Cloudflare Pages
@@ -72,5 +72,5 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy ./web-build --project-name=courtflow --branch=main
+          command: pages deploy ./web-build --project-name=courtflowapp --branch=main
 
