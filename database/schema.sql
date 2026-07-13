@@ -10,9 +10,10 @@
 --    Created automatically via trigger on new sign-up.
 -- ------------------------------------------------------------
 create table if not exists public.profiles (
-  id          uuid primary key references auth.users (id) on delete cascade,
-  username    text not null check (char_length(trim(username)) > 0),
-  created_at  timestamptz not null default now()
+  id                uuid primary key references auth.users (id) on delete cascade,
+  username          text not null check (char_length(trim(username)) > 0),
+  email_verified_at timestamptz,          -- null = not yet verified via our queue
+  created_at        timestamptz not null default now()
 );
 
 alter table public.profiles enable row level security;
@@ -26,7 +27,7 @@ create policy "Users can update own profile"
   using (auth.uid() = id);
 
 -- Auto-create a profile row when a new user signs up.
--- The username defaults to the email prefix until the user changes it.
+-- Uses username from signup metadata if provided, otherwise falls back to email prefix.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql security definer
@@ -35,7 +36,10 @@ begin
   insert into public.profiles (id, username)
   values (
     new.id,
-    split_part(new.email, '@', 1)
+    coalesce(
+      nullif(trim(new.raw_user_meta_data->>'username'), ''),
+      split_part(new.email, '@', 1)
+    )
   );
   return new;
 end;
@@ -98,4 +102,88 @@ create policy "Users can insert own tournaments"
 create policy "Users can delete own tournaments"
   on public.tournaments for delete
   using (auth.uid() = user_id);
+
+-- ------------------------------------------------------------
+-- 4. Email Queue
+--    Stores outgoing confirmation emails to be sent in batches.
+--    Processed by a Supabase Edge Function (max 3/hour to stay
+--    within Supabase free-tier rate limits).
+-- ------------------------------------------------------------
+create table if not exists public.email_queue (
+  id                 uuid primary key default gen_random_uuid(),
+  user_id            uuid not null references auth.users (id) on delete cascade,
+  email              text not null,
+  type               text not null default 'email_confirmation',
+  verification_token uuid not null default gen_random_uuid(), -- included in the email link
+  created_at         timestamptz not null default now(),
+  scheduled_at       timestamptz not null default now(),
+  sent_at            timestamptz,
+  error              text
+);
+
+-- Only the service role (Edge Function) can read/update this table.
+-- Users can insert their own queued email.
+alter table public.email_queue enable row level security;
+
+create policy "Users can queue own confirmation email"
+  on public.email_queue for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can view own email queue"
+  on public.email_queue for select
+  using (auth.uid() = user_id);
+
+-- ------------------------------------------------------------
+-- 5. verify_email RPC
+--    Called when user clicks the link in the confirmation email.
+--    Matches the token, marks profiles.email_verified_at.
+-- ------------------------------------------------------------
+create or replace function public.verify_email(token uuid)
+returns boolean
+language plpgsql security definer
+as $$
+declare
+  v_user_id uuid;
+begin
+  -- Find the queued email with this token that hasn't expired (7 days)
+  select user_id into v_user_id
+  from public.email_queue
+  where verification_token = token
+    and sent_at is not null
+    and created_at > now() - interval '7 days'
+  limit 1;
+
+  if v_user_id is null then
+    return false;
+  end if;
+
+  -- Mark the profile as verified
+  update public.profiles
+  set email_verified_at = now()
+  where id = v_user_id;
+
+  return true;
+end;
+$$;
+
+-- ------------------------------------------------------------
+-- 6. pg_cron schedule (run once after enabling the extension)
+--    Supabase Dashboard → Database → Extensions → enable pg_cron
+--    Then run this once in the SQL editor:
+--
+--  select cron.schedule(
+--    'process-email-queue',
+--    '*/20 * * * *',   -- every 20 minutes
+--    $$
+--      select net.http_post(
+--        url := current_setting('app.edge_function_url') || '/process-email-queue',
+--        headers := jsonb_build_object(
+--          'Content-Type', 'application/json',
+--          'Authorization', 'Bearer ' || current_setting('app.service_role_key')
+--        ),
+--        body := '{}'::jsonb
+--      );
+--    $$
+--  );
+-- ------------------------------------------------------------
 

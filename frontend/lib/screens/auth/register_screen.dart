@@ -12,15 +12,16 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _auth = AuthService();
   final _formKey = GlobalKey<FormState>();
+  final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   bool _loading = false;
   bool _obscurePassword = true;
-  bool _registered = false;
 
   @override
   void dispose() {
+    _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
@@ -34,11 +35,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await _auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text,
+        username: _usernameController.text.trim(),
       );
-      setState(() => _registered = true);
+      // Queue confirmation email — sent in background, won't block the user.
+      // _AuthGate detects the new session and navigates to Dashboard.
+      await _auth.queueConfirmationEmail();
     } on AuthException catch (e) {
+      if (!mounted) return;
       _showError(e.message);
     } catch (_) {
+      if (!mounted) return;
       _showError('An unexpected error occurred. Please try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -55,38 +61,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    if (_registered) {
-      return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.mark_email_read_outlined,
-                    size: 72, color: colorScheme.primary),
-                const SizedBox(height: 24),
-                Text('Check your email',
-                    style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 12),
-                Text(
-                  'We sent a confirmation link to ${_emailController.text.trim()}.\nClick it to activate your account.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: colorScheme.onSurface.withValues(alpha: 0.6)),
-                ),
-                const SizedBox(height: 32),
-                FilledButton(
-                  onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-                  child: const Text('Back to Sign In'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -98,19 +72,42 @@ class _RegisterScreenState extends State<RegisterScreen> {
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(32.0),
             child: Form(
               key: _formKey,
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Username
+                  TextFormField(
+                    controller: _usernameController,
+                    autofillHints: const [AutofillHints.nickname],
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Username',
+                      prefixIcon: Icon(Icons.person_outline),
+                      border: OutlineInputBorder(),
+                      helperText: 'Displayed on your profile',
+                    ),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Choose a username';
+                      }
+                      if (v.trim().length < 2) {
+                        return 'Username must be at least 2 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
                   // Email
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.newUsername],
+                    textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                       labelText: 'Email',
                       prefixIcon: Icon(Icons.email_outlined),
@@ -129,6 +126,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     autofillHints: const [AutofillHints.newPassword],
+                    textInputAction: TextInputAction.next,
                     decoration: InputDecoration(
                       labelText: 'Password',
                       prefixIcon: const Icon(Icons.lock_outline),
@@ -144,7 +142,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     validator: (v) {
                       if (v == null || v.isEmpty) return 'Enter a password';
-                      if (v.length < 6) return 'Password must be at least 6 characters';
+                      if (v.length < 6) {
+                        return 'Password must be at least 6 characters';
+                      }
                       return null;
                     },
                   ),
@@ -154,6 +154,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _confirmController,
                     obscureText: true,
+                    autofillHints: const [AutofillHints.newPassword],
+                    textInputAction: TextInputAction.done,
                     decoration: const InputDecoration(
                       labelText: 'Confirm password',
                       prefixIcon: Icon(Icons.lock_outline),
@@ -167,7 +169,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     },
                     onFieldSubmitted: (_) => _signUp(),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 12),
+
+                  // Info note about email
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline,
+                            size: 16,
+                            color: colorScheme.primary.withValues(alpha: 0.8)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'A confirmation email will be sent shortly after sign-up.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color:
+                                  colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
 
                   FilledButton(
                     onPressed: _loading ? null : _signUp,
@@ -188,3 +218,5 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 }
+
+

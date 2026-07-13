@@ -5,6 +5,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/players_screen.dart';
+import 'screens/verify_email_screen.dart';
 
 // Credentials are injected at build time via --dart-define-from-file=.env.json
 // Copy frontend/.env.example.json → frontend/.env.json and fill in your values.
@@ -39,6 +40,18 @@ class CourtFlowApp extends StatelessWidget {
         '/register': (context) => const RegisterScreen(),
         '/dashboard': (context) => const DashboardScreen(),
         '/players': (context) => const PlayersScreen(),
+      },
+      onGenerateRoute: (settings) {
+        // Handle /verify?token=UUID from confirmation emails
+        if (settings.name != null &&
+            settings.name!.startsWith('/verify')) {
+          final uri = Uri.parse(settings.name!);
+          final token = uri.queryParameters['token'] ?? '';
+          return MaterialPageRoute(
+            builder: (_) => VerifyEmailScreen(token: token),
+          );
+        }
+        return null;
       },
     );
   }
